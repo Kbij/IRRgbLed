@@ -1,0 +1,7 @@
+{
+    "sketch": "IRRgbLed.ino",
+    "board": "arduino:avr:uno",
+    "programmer": "AVR ISP",
+    "port": "COM8",
+    "output": "../build"
+}
