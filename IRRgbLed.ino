@@ -9,25 +9,36 @@ IRrecv irRecv(IR_PIN);
 WS2812FX ws2812fx = WS2812FX(LED_COUNT, LED_PIN, NEO_GRB + NEO_KHZ800);
 
 decode_results results;
+unsigned long lastCommandTime;
 unsigned long lastCommand;
 unsigned long lastLoop;
+uint8_t red;
+uint8_t green;
+uint8_t blue;
+
 int currentMode;
 int brightness;
-#define POWER_OFF 0xFFA25D
-#define POWER_ON 0xFFE21D
-#define INTENSITY_DOWN 0x0FFE01F
-#define INTENSITY_UP 0xFFA857
-#define NEXT_MODE 0xFF906F
-#define PRESET_1 0xFF30CF
-#define PRESET_2 0xFF18E7
-#define PRESET_3 0xFF7A85
-#define PRESET_4 0xFF10EF
-#define PRESET_5 0xFF38C7
-#define PRESET_6 0xFF5AA5
-#define PRESET_7 0xFF42BD
-#define PRESET_8 0xFF4AB5
-#define PRESET_9 0xFF52AD
-#define BRIGHTNESS_STEPS 30;
+bool powerOn;
+
+#define INTENSITY_DOWN 0x11
+#define INTENSITY_UP 0x10
+#define NEXT_MODE 0x20
+#define PREV_MODE 0x21
+#define PRESET_1 0x01
+#define PRESET_2 0x02
+#define PRESET_3 0x03
+#define PRESET_4 0x04
+#define PRESET_5 0x05
+#define PRESET_6 0x06
+#define PRESET_7 0x07
+#define PRESET_8 0x08
+#define PRESET_9 0x09
+#define BRIGHTNESS_STEPS 30
+#define COLOR_STEPS 30
+#define POWER_TOGGLE 0x0C
+#define UD_RED 0x6D
+#define UD_GREEN 0x6E
+#define UD_BLUE 0x70
 
 void setup()
 {
@@ -43,12 +54,18 @@ void setup()
     brightness = 255;
     ws2812fx.setBrightness(brightness);
     ws2812fx.setSpeed(7000);
-    ws2812fx.setColor(0xFF, 0x80, 0x00);
+
+    red = 0x10;//0xFF;
+    green = 0x10;//0x80;
+    blue = 0x00;
+    ws2812fx.setColor(red, green, blue);
     currentMode = FX_MODE_STATIC;
     
     ws2812fx.setMode(currentMode);//FX_MODE_RAINBOW_CYCLE);
    // ws2812fx.start();    
     lastLoop = millis();
+    lastCommandTime = millis();
+    powerOn = false;
 }
 
 void loop()
@@ -56,34 +73,40 @@ void loop()
     int waitTimeMs = 100;
     unsigned long now = millis();
 
-    if (now - lastLoop > 100)
+    if (now - lastLoop > 200)
     {
-         Serial.println("processing loop");
-
         if (irRecv.decode(&results))
         {
-           // Serial.println(results.value, HEX);
-            unsigned long currentCommand = results.value;
+            unsigned long currentCommand = results.value & 0xFF;
+           // int repeat = (results.value >> 15) && 0x01;
+            bool repeat = ((now - lastCommandTime) < 500) && (currentCommand == lastCommand);
 
-            if (currentCommand == REPEAT)
-            {
-                currentCommand = lastCommand;
-            }
+            Serial.print("Received: 0x");
+
+            Serial.print("Received: 0x");
+            Serial.print(currentCommand, HEX);
+            Serial.print(", repeat: ");
+            Serial.println(repeat, HEX);
 
             switch(currentCommand)
             {
-                case POWER_OFF:
+                case POWER_TOGGLE:
                 {
-                    ws2812fx.stop();
-                    Serial.println(F("Power Off"));
-                    waitTimeMs = 100;
-                    break;
-                }
-                case POWER_ON:
-                {
-                    ws2812fx.start();
-                    Serial.println(F("Power On"));
-                    waitTimeMs = 100;
+                    if (!repeat)
+                    {
+                        if (powerOn)
+                        {
+                            powerOn = false;
+                            ws2812fx.stop();
+                            Serial.println(F("Power Off"));
+                        }
+                        else
+                        {
+                            powerOn = true;
+                            ws2812fx.start();
+                            Serial.println(F("Power On"));
+                        }
+                    }
                     break;
                 }
                 case INTENSITY_DOWN:
@@ -111,10 +134,21 @@ void loop()
                     currentMode += 1;
                     if (currentMode > MODE_COUNT) currentMode = FX_MODE_STATIC;
                     ws2812fx.setMode(currentMode);
-                    Serial.println(F("Next Mode"));
+                    Serial.print(F("Next, Mode: "));
+                    Serial.println(ws2812fx.getModeName(currentMode));
                     waitTimeMs = 1000;
                     break;
                 }
+                case PREV_MODE:
+                {
+                    currentMode -= 1;
+                    if (currentMode < FX_MODE_STATIC) currentMode = FX_MODE_STATIC;
+                    ws2812fx.setMode(currentMode);
+                    Serial.print(F("Prev, Mode: "));
+                    Serial.println(ws2812fx.getModeName(currentMode));
+                    waitTimeMs = 1000;
+                    break;
+                }                
                 case PRESET_1:
                 {
                     Serial.println(F("Preset 1"));
@@ -169,18 +203,40 @@ void loop()
                     waitTimeMs = 1000;
                     break;
                 }                                                                                      
-                case REPEAT: 
+                case UD_RED:
                 {
-                    Serial.println(F("Repeat Last"));
+                    red += 255/COLOR_STEPS;
+                    if (red >= 255) red = 255;
+                    ws2812fx.setColor(red, green, blue);
+
+                    Serial.println(F("Red Up"));
+                    waitTimeMs = 500;                    
+                    break;
+                }
+                case UD_GREEN:
+                {
+                    green += 255/COLOR_STEPS;
+                    if (green >= 255) green = 255;
+                    ws2812fx.setColor(red, green, blue);
+
+                    Serial.println(F("Green Up"));
+                    waitTimeMs = 500;                    
+                    break;
+                }
+                case UD_BLUE:
+                {
+                    blue += 255/COLOR_STEPS;
+                    if (blue >= 255) blue = 255;
+                    ws2812fx.setColor(red, green, blue);
+
+                    Serial.println(F("Blue Up"));
+                    waitTimeMs = 500;                    
                     break;
                 }
             }
 
-            if (results.value != REPEAT)
-            {
-                lastCommand = results.value;
-            }
-
+            lastCommandTime = now;
+            lastCommand = currentCommand;
             irRecv.resume(); // Receive the next value
         }
 
