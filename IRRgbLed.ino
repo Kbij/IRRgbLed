@@ -49,14 +49,12 @@ uint8_t sunriseLevel;
 #define SUNRISE_DOWN 2
 
 
-int16_t mySunriseEffect(void)
+uint16_t mySunriseEffect(void)
 {
     WS2812FX::Segment* seg = ws2812fx.getSegment(); // get the current segment
 
     if (sunriseState == SUNRISE_UP)
     {
-        //ws2812fx.setBrightness(sunriseLevel);
-
         for(uint16_t i=seg->stop; i>seg->start; i--)
         {
             ws2812fx.setPixelColor(i, ws2812fx.getPixelColor(i-1));
@@ -74,8 +72,6 @@ int16_t mySunriseEffect(void)
     }
     else if (sunriseState == SUNRISE_DOWN)
     {
-        //ws2812fx.setBrightness(sunriseLevel);
-
         for(uint16_t i=seg->start; i < seg->stop; i++)
         {
             ws2812fx.setPixelColor(i, ws2812fx.getPixelColor(i+1));
@@ -109,8 +105,6 @@ int16_t mySunriseEffect(void)
 void setup()
 {
     Serial.begin(115200);
-
-
     irRecv.enableIRIn(); // Start the receiver
 
     Serial.print(F("Ready to receive IR signals at pin "));
@@ -129,7 +123,6 @@ void setup()
 
     ws2812fx.setMode(currentMode);//FX_MODE_RAINBOW_CYCLE);
     ws2812fx.setCustomMode(FX_MODE_CUSTOM_0, mySunriseEffect);
-   // ws2812fx.start();
     lastLoop = millis();
     lastCommandTime = millis();
     powerOn = false;
@@ -137,57 +130,8 @@ void setup()
     sunriseLevel = 0;
 }
 
-// void doSunRise()
-// {
-//     Serial.print(F("Do Sunrise: "));
-//     Serial.println(sunriseLevel);
-
-//     //Set the initial values
-//     if (sunriseLevel == 0 && sunriseState == SUNRISE_UP)
-//     {
-//         //Pure Red
-//         ws2812fx.setColor(0xFF, 0x00, 0x00); //Red, Green, Blue
-//         ws2812fx.setBrightness(sunriseLevel);
-//         ws2812fx.setMode(FX_MODE_STATIC);
-//         ws2812fx.start();
-//     }
-//     if (sunriseLevel == 255 && sunriseState == SUNRISE_DOWN)
-//     {
-//         //Yellow
-//         ws2812fx.setColor(0xFF, 0xFF, 0x00); //Red, Green, Blue
-//         ws2812fx.setBrightness(sunriseLevel);
-//         ws2812fx.setMode(FX_MODE_STATIC);
-//         ws2812fx.start();
-//     }
-
-//     ws2812fx.setBrightness(sunriseLevel);
-//     ws2812fx.show();
-
-//     if (sunriseState == SUNRISE_UP)
-//     {
-//         ++sunriseLevel;
-//         if (sunriseLevel == 255)
-//         {
-//             sunriseState = SUNRISE_NONE;
-//             ws2812fx.stop();
-//         }
-//     }
-//     if (sunriseState == SUNRISE_DOWN)
-//     {
-//         --sunriseLevel;
-//         if (sunriseLevel == 0)
-//         {
-//             sunriseState = SUNRISE_NONE;
-//             ws2812fx.stop();
-//         }
-//     }
-// }
-
-
-
 void loop()
 {
-    int waitTimeMs = 100;
     unsigned long now = millis();
 
     if (now - lastLoop > 200)
@@ -195,10 +139,7 @@ void loop()
         if (irRecv.decode(&results))
         {
             unsigned long currentCommand = results.value & 0xFF;
-           // int repeat = (results.value >> 15) && 0x01;
             bool repeat = ((now - lastCommandTime) < 500) && (currentCommand == lastCommand);
-
-            Serial.print("Received: 0x");
 
             Serial.print("Received: 0x");
             Serial.print(currentCommand, HEX);
@@ -263,41 +204,25 @@ void loop()
                 }
                 case INTENSITY_DOWN:
                 {
-                    if (sunriseState == SUNRISE_NONE)
+                    if (ws2812fx.getMode() != FX_MODE_CUSTOM_0)
                     {
                         brightness -= 255/BRIGHTNESS_STEPS;
                         if (brightness <= 0) brightness = 1;
                         ws2812fx.setBrightness(brightness);
 
                         Serial.println(F("Intensity Down"));
-                        waitTimeMs = 500;
-                    }
-                    else
-                    {
-                        --sunriseLevel;
-                        Serial.print(F("Sunrise Down: "));
-                        Serial.println(sunriseLevel);
-                        lastSunRiseLoopTime = 0; //Force update
                     }
                     break;
                 }
                 case INTENSITY_UP:
                 {
-                    if (sunriseState == SUNRISE_NONE)
+                    if (ws2812fx.getMode() != FX_MODE_CUSTOM_0)
                     {
                         brightness += 255/BRIGHTNESS_STEPS;
                         if (brightness >= 255) brightness = 255;
                         ws2812fx.setBrightness(brightness);
 
                         Serial.println(F("Intensity Up"));
-                        waitTimeMs = 500;
-                        lastSunRiseLoopTime = 0; //Force update
-                    }
-                    else
-                    {
-                        ++sunriseLevel;
-                        Serial.print(F("Sunrise Up: "));
-                        Serial.println(sunriseLevel);
                         lastSunRiseLoopTime = 0; //Force update
                     }
                     break;
@@ -309,7 +234,6 @@ void loop()
                     ws2812fx.setMode(currentMode);
                     Serial.print(F("Next, Mode: "));
                     Serial.println(ws2812fx.getModeName(currentMode));
-                    waitTimeMs = 1000;
                     break;
                 }
                 case PREV_MODE:
@@ -319,61 +243,51 @@ void loop()
                     ws2812fx.setMode(currentMode);
                     Serial.print(F("Prev, Mode: "));
                     Serial.println(ws2812fx.getModeName(currentMode));
-                    waitTimeMs = 1000;
                     break;
                 }
                 case PRESET_1:
                 {
                     Serial.println(F("Preset 1"));
-                    waitTimeMs = 1000;
                     break;
                 }
                 case PRESET_2:
                 {
                     Serial.println(F("Preset 2"));
-                    waitTimeMs = 1000;
                     break;
                 }
                 case PRESET_3:
                 {
                     Serial.println(F("Preset 3"));
-                    waitTimeMs = 1000;
                     break;
                 }
                 case PRESET_4:
                 {
                     Serial.println(F("Preset 4"));
-                    waitTimeMs = 1000;
                     break;
                 }
                 case PRESET_5:
                 {
                     Serial.println(F("Preset 5"));
-                    waitTimeMs = 1000;
                     break;
                 }
                 case PRESET_6:
                 {
                     Serial.println(F("Preset 6"));
-                    waitTimeMs = 1000;
                     break;
                 }
                 case PRESET_7:
                 {
                     Serial.println(F("Preset 7"));
-                    waitTimeMs = 1000;
                     break;
                 }
                 case PRESET_8:
                 {
                     Serial.println(F("Preset 8"));
-                    waitTimeMs = 1000;
                     break;
                 }
                 case PRESET_9:
                 {
                     Serial.println(F("Preset 9"));
-                    waitTimeMs = 1000;
                     break;
                 }
                 case UD_RED:
@@ -381,9 +295,9 @@ void loop()
                     red += 255/COLOR_STEPS;
                     if (red >= 255) red = 255;
                     ws2812fx.setColor(red, green, blue);
+                    ws2812fx.show();
 
                     Serial.println(F("Red Up"));
-                    waitTimeMs = 500;
                     break;
                 }
                 case UD_GREEN:
@@ -391,9 +305,9 @@ void loop()
                     green += 255/COLOR_STEPS;
                     if (green >= 255) green = 255;
                     ws2812fx.setColor(red, green, blue);
+                    ws2812fx.show();
 
                     Serial.println(F("Green Up"));
-                    waitTimeMs = 500;
                     break;
                 }
                 case UD_BLUE:
@@ -401,9 +315,9 @@ void loop()
                     blue += 255/COLOR_STEPS;
                     if (blue >= 255) blue = 255;
                     ws2812fx.setColor(red, green, blue);
+                    ws2812fx.show();
 
                     Serial.println(F("Blue Up"));
-                    waitTimeMs = 500;
                     break;
                 }
             }
@@ -415,16 +329,6 @@ void loop()
 
         lastLoop = now;
     }
-
-
-    // if ((now - lastSunRiseLoopTime) > 500)
-    // {
-    //     if (sunriseState != SUNRISE_NONE)
-    //     {
-    //         doSunRise();
-    //     }
-    //     lastSunRiseLoopTime = now;
-    // }
 
     if (irRecv.isIdle())
     {
