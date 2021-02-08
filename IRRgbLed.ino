@@ -26,6 +26,7 @@ bool powerOn;
 int8_t sunriseState;
 unsigned long lastSunRiseLoopTime;
 uint8_t sunriseLevel;
+uint8_t SUNRISE_MODE;
 
 #define INTENSITY_DOWN 0x11
 #define INTENSITY_UP 0x10
@@ -54,7 +55,7 @@ uint8_t sunriseLevel;
 #define SUNRISE_CANCELED 3
 
 
-uint16_t mySunriseEffect(void)
+uint16_t sunriseEffect(void)
 {
     WS2812FX::Segment* seg = ws2812fx.getSegment(); // get the current segment
 
@@ -97,8 +98,6 @@ uint16_t mySunriseEffect(void)
         {
             powerOn = false;
             sunriseState = SUNRISE_NONE;
-            // ws2812fx.setBrightness(200);
-            // ws2812fx.setMode(FX_MODE_STATIC);
             ws2812fx.stop();
             Serial.println(F("Sunrise Power Off"));
         }
@@ -121,8 +120,8 @@ void setup()
     ws2812fx.setBrightness(brightness);
     ws2812fx.setSpeed(7000);
 
-    red = 0x10;//0xFF;
-    green = 0x10;//0x80;
+    red = 0x20;
+    green = 0x10;
     blue = 0x00;
     ws2812fx.setColor(red, green, blue);
     currentMode = FX_MODE_STATIC;
@@ -130,8 +129,8 @@ void setup()
     green_up = true;
     blue_up = true;;
 
-    ws2812fx.setMode(currentMode);//FX_MODE_RAINBOW_CYCLE);
-    ws2812fx.setCustomMode(FX_MODE_CUSTOM_0, mySunriseEffect);
+    ws2812fx.setMode(currentMode);
+    SUNRISE_MODE = ws2812fx.setCustomMode(F("Sunrise"), sunriseEffect);
     lastLoop = millis();
     lastCommandTime = millis();
     powerOn = false;
@@ -152,7 +151,7 @@ void loop()
             powerOn = true;
             ws2812fx.setBrightness(255);
             ws2812fx.setColor(0x00, 0x00, 0x00);
-            ws2812fx.setMode(FX_MODE_CUSTOM_0);
+            ws2812fx.setMode(SUNRISE_MODE);
             ws2812fx.setSpeed(1000);
             ws2812fx.start();
             sunriseState = SUNRISE_UP;
@@ -211,7 +210,7 @@ void loop()
                             ws2812fx.start();
 
                             //When current mode = sunrise, set it to a static mode
-                            if (ws2812fx.getMode() == FX_MODE_CUSTOM_0)
+                            if (ws2812fx.getMode() == SUNRISE_MODE)
                             {
                                 Serial.println(F("Clear from Sunrise settings"));
                                 ws2812fx.setBrightness(200);
@@ -226,7 +225,7 @@ void loop()
                 }
                 case INTENSITY_DOWN:
                 {
-                    if (ws2812fx.getMode() != FX_MODE_CUSTOM_0)
+                    if (ws2812fx.getMode() != SUNRISE_MODE)
                     {
                         brightness -= 255/BRIGHTNESS_STEPS;
                         if (brightness <= 0) brightness = 1;
@@ -238,7 +237,7 @@ void loop()
                 }
                 case INTENSITY_UP:
                 {
-                    if (ws2812fx.getMode() != FX_MODE_CUSTOM_0)
+                    if (ws2812fx.getMode() != SUNRISE_MODE)
                     {
                         brightness += 255/BRIGHTNESS_STEPS;
                         if (brightness >= 255) brightness = 255;
