@@ -4,6 +4,7 @@
 #define LED_COUNT 149
 #define LED_PIN A4
 #define IR_PIN A5
+#define SUNRISE_PIN 2
 
 IRrecv irRecv(IR_PIN);
 WS2812FX ws2812fx = WS2812FX(LED_COUNT, LED_PIN, NEO_GRB + NEO_KHZ800);
@@ -12,9 +13,12 @@ decode_results results;
 unsigned long lastCommandTime;
 unsigned long lastCommand;
 unsigned long lastLoop;
-uint8_t red;
-uint8_t green;
-uint8_t blue;
+uint16_t red;
+uint16_t green;
+uint16_t blue;
+bool red_up;
+bool green_up;
+bool blue_up;
 
 int currentMode;
 int brightness;
@@ -47,6 +51,7 @@ uint8_t sunriseLevel;
 #define SUNRISE_NONE -1
 #define SUNRISE_UP 1
 #define SUNRISE_DOWN 2
+#define SUNRISE_CANCELED 3
 
 
 uint16_t mySunriseEffect(void)
@@ -92,8 +97,8 @@ uint16_t mySunriseEffect(void)
         {
             powerOn = false;
             sunriseState = SUNRISE_NONE;
-            ws2812fx.setBrightness(200);
-            ws2812fx.setMode(FX_MODE_STATIC);
+            // ws2812fx.setBrightness(200);
+            // ws2812fx.setMode(FX_MODE_STATIC);
             ws2812fx.stop();
             Serial.println(F("Sunrise Power Off"));
         }
@@ -106,6 +111,7 @@ void setup()
 {
     Serial.begin(115200);
     irRecv.enableIRIn(); // Start the receiver
+    pinMode(SUNRISE_PIN, INPUT); //Set the Sunrise input pin
 
     Serial.print(F("Ready to receive IR signals at pin "));
     Serial.println(IR_PIN);
@@ -115,11 +121,14 @@ void setup()
     ws2812fx.setBrightness(brightness);
     ws2812fx.setSpeed(7000);
 
-    red = 0xFF;//0xFF;
-    green = 0xFF;//0x80;
+    red = 0x10;//0xFF;
+    green = 0x10;//0x80;
     blue = 0x00;
     ws2812fx.setColor(red, green, blue);
     currentMode = FX_MODE_STATIC;
+    red_up = true;
+    green_up = true;
+    blue_up = true;;
 
     ws2812fx.setMode(currentMode);//FX_MODE_RAINBOW_CYCLE);
     ws2812fx.setCustomMode(FX_MODE_CUSTOM_0, mySunriseEffect);
@@ -133,6 +142,38 @@ void setup()
 void loop()
 {
     unsigned long now = millis();
+
+    //If the sunrise pin is activated
+    if (digitalRead(SUNRISE_PIN) == LOW)
+    {
+        if (!powerOn  && sunriseState == SUNRISE_NONE)
+        {
+            Serial.println("Sunrise activated");
+            powerOn = true;
+            ws2812fx.setBrightness(255);
+            ws2812fx.setColor(0x00, 0x00, 0x00);
+            ws2812fx.setMode(FX_MODE_CUSTOM_0);
+            ws2812fx.setSpeed(1000);
+            ws2812fx.start();
+            sunriseState = SUNRISE_UP;
+            sunriseLevel = 0;
+        }
+    }
+    else
+    {
+        if (powerOn && sunriseState == SUNRISE_UP)
+        {
+            Serial.println("Sunrise de-activated");
+            sunriseState = SUNRISE_DOWN;
+            ws2812fx.setSpeed(20);
+        }
+
+        //Reset a possible Sunrise cancel
+        if (sunriseState == SUNRISE_CANCELED)
+        {
+            sunriseState = SUNRISE_NONE;
+        }
+    }
 
     if (now - lastLoop > 200)
     {
@@ -154,52 +195,33 @@ void loop()
                     {
                         if (powerOn)
                         {
+                            Serial.println(F("Power Off"));
+
                             powerOn = false;
                             ws2812fx.stop();
-                            Serial.println(F("Power Off"));
+                            //If sunrise would have been activated, cancel it
+                            if (sunriseState != SUNRISE_NONE) sunriseState = SUNRISE_CANCELED;
                         }
                         else
                         {
+                            Serial.println(F("Power On"));
+
                             powerOn = true;
+                            sunriseState = SUNRISE_NONE;
+                            ws2812fx.start();
+
                             //When current mode = sunrise, set it to a static mode
                             if (ws2812fx.getMode() == FX_MODE_CUSTOM_0)
                             {
+                                Serial.println(F("Clear from Sunrise settings"));
                                 ws2812fx.setBrightness(200);
+                                ws2812fx.setColor(0xFF, 0x80, 0x00);
+                                ws2812fx.setSpeed(1000);
                                 ws2812fx.setMode(FX_MODE_STATIC);
                             }
-                            ws2812fx.start();
-                            Serial.println(F("Power On"));
-                        }
-                    }
-                    break;
-                }
-                case SUNRISE_ON:
-                {
-                    if (!repeat)
-                    {
-                        if (!powerOn)
-                        {
-                            Serial.println(F("Start Sunrise On"));
-                            powerOn = true;
-                            ws2812fx.setBrightness(255);
-                            ws2812fx.setColor(0x00, 0x00, 0x00);
-                            ws2812fx.setMode(FX_MODE_CUSTOM_0);
-                            ws2812fx.setSpeed(1000);
-                            ws2812fx.start();
-                            sunriseState = SUNRISE_UP;
-                            sunriseLevel = 0;
-                        }
-                        else
-                        {
-                            Serial.println(F("Start Sunrise Off"));
-                            if (sunriseState == SUNRISE_UP)
-                            {
-                                sunriseState = SUNRISE_DOWN;
-                                ws2812fx.setSpeed(20);
-                            }
-                        }
-                    }
 
+                        }
+                    }
                     break;
                 }
                 case INTENSITY_DOWN:
@@ -292,32 +314,92 @@ void loop()
                 }
                 case UD_RED:
                 {
-                    red += 255/COLOR_STEPS;
-                    if (red >= 255) red = 255;
-                    ws2812fx.setColor(red, green, blue);
-                    ws2812fx.show();
+                    if (repeat)
+                    {
+                        if (red_up)
+                        {
+                            Serial.println(F("Red Up"));
+                            red += 255/COLOR_STEPS;
+                            if (red >= 255)
+                            {
+                                red = 255;
+                                red_up = false;
+                            }
+                        }
+                        else
+                        {
+                            Serial.println(F("Red Down"));
+                            red -= 255/COLOR_STEPS;
+                            if (red <= 10)
+                            {
+                                red = 10;
+                                red_up = true;
+                            }
+                        }
 
-                    Serial.println(F("Red Up"));
+                        ws2812fx.setColor(red, green, blue);
+                        ws2812fx.trigger();
+                    }
                     break;
                 }
                 case UD_GREEN:
                 {
-                    green += 255/COLOR_STEPS;
-                    if (green >= 255) green = 255;
-                    ws2812fx.setColor(red, green, blue);
-                    ws2812fx.show();
+                    if (repeat)
+                    {
+                        if (green_up)
+                        {
+                            Serial.println(F("Green Up"));
+                            green += 255/COLOR_STEPS;
+                            if (green >= 255)
+                            {
+                                green = 255;
+                                green_up = false;
+                            }
+                        }
+                        else
+                        {
+                            Serial.println(F("Green Down"));
+                            green -= 255/COLOR_STEPS;
+                            if (green <= 10)
+                            {
+                                green = 10;
+                                green_up = true;
+                            }
+                        }
 
-                    Serial.println(F("Green Up"));
+                        ws2812fx.setColor(red, green, blue);
+                        ws2812fx.trigger();
+                    }
                     break;
                 }
                 case UD_BLUE:
                 {
-                    blue += 255/COLOR_STEPS;
-                    if (blue >= 255) blue = 255;
-                    ws2812fx.setColor(red, green, blue);
-                    ws2812fx.show();
+                    if (repeat)
+                    {
+                        if (blue_up)
+                        {
+                            Serial.println(F("Blue Up"));
+                            blue += 255/COLOR_STEPS;
+                            if (blue >= 255)
+                            {
+                                blue = 255;
+                                blue_up = false;
+                            }
+                        }
+                        else
+                        {
+                            Serial.println(F("Blue Down"));
+                            blue -= 255/COLOR_STEPS;
+                            if (blue <= 10)
+                            {
+                                blue = 10;
+                                blue_up = true;
+                            }
+                        }
 
-                    Serial.println(F("Blue Up"));
+                        ws2812fx.setColor(red, green, blue);
+                        ws2812fx.trigger();
+                    }
                     break;
                 }
             }
