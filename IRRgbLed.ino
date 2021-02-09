@@ -160,7 +160,7 @@ void loop()
             ws2812fx.start();
             sunriseState = SUNRISE_UP;
             sunriseLevel = 0;
-            powerOnTime = millis();
+            powerOnTime = now;
         }
     }
     else
