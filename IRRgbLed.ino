@@ -27,6 +27,9 @@ int8_t sunriseState;
 unsigned long lastSunRiseLoopTime;
 uint8_t sunriseLevel;
 uint8_t SUNRISE_MODE;
+unsigned long powerOnTime;
+const unsigned long MAX_POWERON_MILLIS = 2 * 60 * 60 * 1000UL;
+
 
 #define INTENSITY_DOWN 0x11
 #define INTENSITY_UP 0x10
@@ -53,6 +56,7 @@ uint8_t SUNRISE_MODE;
 #define SUNRISE_UP 1
 #define SUNRISE_DOWN 2
 #define SUNRISE_CANCELED 3
+
 
 
 uint16_t sunriseEffect(void)
@@ -156,6 +160,7 @@ void loop()
             ws2812fx.start();
             sunriseState = SUNRISE_UP;
             sunriseLevel = 0;
+            powerOnTime = millis();
         }
     }
     else
@@ -172,6 +177,15 @@ void loop()
         {
             sunriseState = SUNRISE_NONE;
         }
+    }
+
+    if (powerOn && ((now - powerOnTime) > MAX_POWERON_MILLIS))
+    {
+        Serial.println(F("Auto power off"));
+        powerOn = false;
+        ws2812fx.stop();
+        //If sunrise would have been activated, cancel it
+        if (sunriseState != SUNRISE_NONE) sunriseState = SUNRISE_CANCELED;
     }
 
     if (now - lastLoop > 200)
@@ -206,6 +220,7 @@ void loop()
                             Serial.println(F("Power On"));
 
                             powerOn = true;
+                            powerOnTime = now;
                             sunriseState = SUNRISE_NONE;
                             ws2812fx.start();
 
